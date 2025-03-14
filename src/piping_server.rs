@@ -148,7 +148,7 @@ impl PipingServer {
                     let query_params = query_param_to_hash_map(req_parts.uri.query());
                     let style_nonce: String = {
                         let mut nonce_bytes = [0u8; 16];
-                        getrandom::getrandom(&mut nonce_bytes).unwrap();
+                        getrandom::fill(&mut nonce_bytes).unwrap();
                         base64::engine::general_purpose::STANDARD.encode(nonce_bytes)
                     };
                     let html = dynamic_resources::no_script_html(&query_params, &style_nonce);
