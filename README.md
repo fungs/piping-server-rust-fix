@@ -56,13 +56,7 @@ curl -L https://github.com/nwtgck/piping-server-rust/releases/download/v0.18.0/p
 
 Executable files are available on [GitHub Release](https://github.com/nwtgck/piping-server-rust/releases).
 
-### Way 6: Replit
-
-Click <kbd>Fork</kbd> button in the link below and fork it.
-
-<https://replit.com/@nwtgck/piping-rust>
-
-### Way 7: Build and run by yourself
+### Way 6: Build and run by yourself
 You can clone, build and run `piping-server` as follows.
 
 ```bash
