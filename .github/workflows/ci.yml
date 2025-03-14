@@ -5,6 +5,7 @@ on: [push]
 env:
   CROSS_REVISION: 36c0d7810ddde073f603c82d896c2a6c886ff7a4
   RUST_VERSION: 1.85.0
+  MINIMUM_SUPPORTED_RUST_VERSION: 1.81.0
   PIPING_SERVER_CHECK_VERSION: 0.14.0
 
 jobs:
@@ -30,7 +31,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
-    - run: rustup default 1.65.0
+    - run: rustup default ${MINIMUM_SUPPORTED_RUST_VERSION}
     - run: cargo test -- --color=always --nocapture
 
   cross_build:
