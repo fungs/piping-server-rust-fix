@@ -3,8 +3,8 @@ name: CI
 on: [push]
 
 env:
-  CROSS_VERSION: 0.2.5
-  RUST_VERSION: 1.67.0
+  CROSS_REVISION: 36c0d7810ddde073f603c82d896c2a6c886ff7a4
+  RUST_VERSION: 1.85.0
   PIPING_SERVER_CHECK_VERSION: 0.14.0
 
 jobs:
@@ -57,8 +57,8 @@ jobs:
       - run: rustup default ${RUST_VERSION}
       - uses: actions/checkout@v4
       - name: Install cross
-        run: cd /tmp && curl -L https://github.com/cross-rs/cross/releases/download/v${CROSS_VERSION}/cross-x86_64-unknown-linux-musl.tar.gz | tar xzf -
-      - run: /tmp/cross build --target=${{ matrix.target }} --release --locked
+        run: cd /tmp && cargo install cross --git https://github.com/cross-rs/cross#${CROSS_REVISION}
+      - run: cross build --target=${{ matrix.target }} --release --locked
       - name: Archive binary
         run: |
           set -eu
