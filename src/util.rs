@@ -62,15 +62,29 @@ impl HeaderValuesBuilder for http::response::Builder {
     }
 }
 
+#[derive(Debug)]
+enum TransferMode {
+    ContentLength {
+        expected: u64,
+        received: u64,
+    },
+    Chunked,
+}
+
 pin_project! {
     pub struct FinishDetectableBody<B> {
         #[pin]
         body: B,
         finish_notifier: Option<futures::channel::oneshot::Sender<()>>,
+        transfer_mode: TransferMode,
     }
 }
 
-impl<B: http_body::Body> http_body::Body for FinishDetectableBody<B> {
+impl<B> http_body::Body for FinishDetectableBody<B> 
+where 
+    B: http_body::Body,
+    B::Data: AsRef<[u8]>,  // Add this constraint
+{
     type Data = B::Data;
     type Error = B::Error;
 
@@ -80,15 +94,35 @@ impl<B: http_body::Body> http_body::Body for FinishDetectableBody<B> {
     ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
         let mut this = self.project();
         match this.body.as_mut().poll_frame(cx) {
-            // If body is finished
+            // Determine if body is finished by counting the bytes and comparing to Content-Length
+            Poll::Ready(Some(Ok(frame))) => {
+                // Only count bytes if we're in ContentLength mode
+                if let TransferMode::ContentLength { received, expected } = this.transfer_mode {
+                    if let Some(data) = frame.data_ref() {
+                        let new_received = *received + data.as_ref().len() as u64;
+                        if new_received >= *expected {
+                            if let Some(notifier) = this.finish_notifier.take() {
+                                notifier.send(()).unwrap();
+                            }
+                        }
+                        // Update the received count
+                        if let TransferMode::ContentLength { ref mut received, .. } = this.transfer_mode {
+                            *received = new_received;
+                        }
+                    }
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            // If body is finished (chunked transfer end or connection closed)
             Poll::Ready(None) => {
-                // Notify finish
+                // For both modes, end of stream means we're done
                 if let Some(notifier) = this.finish_notifier.take() {
                     notifier.send(()).unwrap();
                 }
                 Poll::Ready(None)
             }
-            poll => poll,
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
         }
     }
 
@@ -105,15 +139,30 @@ impl<B: http_body::Body> http_body::Body for FinishDetectableBody<B> {
 
 pub fn finish_detectable_body<B: http_body::Body>(
     body: B,
+    headers: Option<&http::HeaderMap>,
 ) -> (
     FinishDetectableBody<B>,
     futures::channel::oneshot::Receiver<()>,
 ) {
     let (finish_notifier, finish_waiter) = futures::channel::oneshot::channel::<()>();
+    
+    // Determine transfer mode from headers
+    let transfer_mode = match headers.and_then(|h| h.get(http::header::CONTENT_LENGTH)) {
+        Some(content_length) => match content_length.to_str().ok().and_then(|s| s.parse::<u64>().ok()) {
+            Some(expected) => TransferMode::ContentLength {
+                expected,
+                received: 0
+            },
+            None => TransferMode::Chunked
+        },
+        None => TransferMode::Chunked
+    };
+
     (
         FinishDetectableBody {
             body,
             finish_notifier: Some(finish_notifier),
+            transfer_mode,
         },
         finish_waiter,
     )
